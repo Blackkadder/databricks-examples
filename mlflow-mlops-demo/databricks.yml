@@ -1,0 +1,128 @@
+# NorthPeak Goods — MLflow-logged CTR Optimization — Databricks Asset Bundle.
+#
+# Re-creates the whole demo on any workspace: a UC schema, the AI/BI dashboard
+# shell, and a setup job that generates the ad-impression data, runs the
+# standardized MLflow CTR-regression retrain (train → register → @champion →
+# batch-score), and deploys the Genie space.
+#
+# There is NO SDP pipeline (the data-gen script does the raw→silver→gold
+# layering itself), no App, no Lakebase, and no KA/MAS — so this is the
+# workflow-only shape: `bundle deploy` then `bundle run northpeak_ctr_setup`.
+#
+# ── 2-command deploy (the user runs these; author does NOT deploy) ───────────
+#   1. databricks bundle deploy --var catalog=… --var schema=… --var warehouse_id=…
+#   2. databricks bundle run northpeak_ctr_setup --var catalog=… --var schema=… --var warehouse_id=…
+
+bundle:
+  name: northpeak_ctr
+
+variables:
+  catalog:
+    description: "Unity Catalog for demo resources"
+    default: "solution_builder"
+  schema:
+    description: "Schema within the catalog (created by this bundle)"
+    default: "demo_mlflow_logged_ctr_optimization"
+  warehouse_id:
+    description: "SQL Warehouse ID — powers the dashboard + Genie space"
+
+sync:
+  include:
+    - "src/**"
+
+targets:
+  dev:
+    default: true
+    mode: development   # prefixes resource names with `[dev <user>]` + the
+                        # schema with `dev_<user>_`. Downstream tasks resolve the
+                        # schema via ${resources.schemas.ctr_schema.name} so they
+                        # hit the prefixed schema. Host comes from the CLI profile.
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+resources:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Schema — the data-gen + ML notebooks create the tables inside it.
+  # No `grants:` block (a grant to `users` fails at deploy on some workspaces).
+  # ──────────────────────────────────────────────────────────────────────────
+  schemas:
+    ctr_schema:
+      name: ${var.schema}
+      catalog_name: ${var.catalog}
+      comment: "NorthPeak Goods CTR optimization — impressions, segment CTR actuals, and MLflow model predictions"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # AI/BI dashboard — dataset_catalog / dataset_schema rebind the embedded
+  # queries per-target (queries use bare table names). Requires CLI v0.283.0+.
+  # ──────────────────────────────────────────────────────────────────────────
+  dashboards:
+    ctr_dashboard:
+      display_name: "[${bundle.target}] NorthPeak CTR Optimization"
+      file_path: ./src/dashboard/dashboard.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${resources.schemas.ctr_schema.catalog_name}
+      dataset_schema: ${resources.schemas.ctr_schema.name}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Setup job — runs after `bundle deploy` creates the schema + dashboard shell.
+  #   generate_data → train_score_ml → deploy_genie
+  # ──────────────────────────────────────────────────────────────────────────
+  jobs:
+    northpeak_ctr_setup:
+      name: "[${bundle.target}] NorthPeak CTR Setup"
+      description: "generate ad-impression data → MLflow CTR retrain (train/register/@champion/batch-score) → deploy Genie space"
+      tasks:
+        # 1. Synthetic ad impressions → silver → gold segment/campaign tables.
+        - task_key: generate_data
+          notebook_task:
+            notebook_path: ./src/data_generation/generate_data.py
+            base_parameters:
+              catalog: ${resources.schemas.ctr_schema.catalog_name}
+              schema:  ${resources.schemas.ctr_schema.name}
+          environment_key: sdk_default
+
+        # 2. Standardized MLflow batch retrain — trains XGBoost CTR-regression
+        #    candidates (Optuna), registers the champion in UC (@champion), and
+        #    batch-scores every segment into gold_ctr_predictions.
+        - task_key: train_score_ml
+          depends_on: [{ task_key: generate_data }]
+          notebook_task:
+            notebook_path: ./src/ml/ctr_train_score.py
+            base_parameters:
+              catalog:         ${resources.schemas.ctr_schema.catalog_name}
+              schema:          ${resources.schemas.ctr_schema.name}
+              experiment_path: /Users/${workspace.current_user.userName}/${bundle.target}_northpeak_ctr/experiments/ctr_regressor
+          environment_key: ml
+
+        # 3. Genie space over the gold actuals + predictions. Needs the
+        #    predictions table, so it depends on the ML task.
+        - task_key: deploy_genie
+          depends_on: [{ task_key: train_score_ml }]
+          notebook_task:
+            notebook_path: ./src/deploy/deploy_genie.py
+            base_parameters:
+              catalog:      ${resources.schemas.ctr_schema.catalog_name}
+              schema:       ${resources.schemas.ctr_schema.name}
+              warehouse_id: ${var.warehouse_id}
+          environment_key: sdk_latest
+
+      # Serverless environments. `client: "4"` is the standard tier.
+      environments:
+        - environment_key: sdk_default
+          spec:
+            client: "4"
+        - environment_key: ml
+          spec:
+            client: "4"
+            dependencies:
+              - "xgboost==2.1.3"
+              - "scikit-learn==1.5.2"
+              - "optuna==4.1.0"
+              - "mlflow>=2.13.0"
+        - environment_key: sdk_latest
+          spec:
+            client: "4"
+            dependencies:
+              - "databricks-sdk>=0.114.0"

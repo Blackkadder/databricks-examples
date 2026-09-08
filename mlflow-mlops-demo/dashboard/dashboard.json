@@ -1,0 +1,1316 @@
+{
+  "datasets": [
+    {
+      "name": "ds_kpi",
+      "displayName": "KPIs",
+      "queryLines": [
+        "SELECT c.event_date, c.impressions, c.clicks, c.conversions, c.spend_usd, c.conversion_value_usd, ",
+        "       COALESCE(w.wasted_spend_usd, 0) AS wasted_spend_usd ",
+        "FROM ( ",
+        "  SELECT event_date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, ",
+        "         SUM(conversions) AS conversions, SUM(spend_usd) AS spend_usd, ",
+        "         SUM(conversion_value_usd) AS conversion_value_usd ",
+        "  FROM gold_campaign_daily GROUP BY event_date ",
+        ") c ",
+        "LEFT JOIN ( ",
+        "  SELECT p.event_date, SUM(p.spend_usd * greatest(0, 1 - p.actual_ctr / nullif(b.baseline_ctr, 0))) AS wasted_spend_usd ",
+        "  FROM gold_ctr_predictions p ",
+        "  JOIN (SELECT campaign_id, SUM(clicks) / SUM(impressions) AS baseline_ctr FROM gold_segment_ctr_daily WHERE is_drift_window = FALSE GROUP BY campaign_id) b ",
+        "    ON p.campaign_id = b.campaign_id ",
+        "  WHERE p.is_drift_window = TRUE AND p.is_drift_segment = TRUE GROUP BY p.event_date ",
+        ") w ON c.event_date = w.event_date"
+      ]
+    },
+    {
+      "name": "ds_pred_actual",
+      "displayName": "Predicted vs actual CTR by week",
+      "queryLines": [
+        "SELECT event_week, ",
+        "       SUM(clicks_actual) / SUM(impressions) AS actual_ctr, ",
+        "       SUM(pred_stale_weighted) / SUM(impressions) AS predicted_ctr_stale, ",
+        "       SUM(pred_champ_weighted) / SUM(impressions) AS predicted_ctr_champion ",
+        "FROM ( ",
+        "  SELECT date_trunc('week', event_date) AS event_week, impressions, ",
+        "         actual_ctr * impressions AS clicks_actual, ",
+        "         predicted_ctr_stale * impressions AS pred_stale_weighted, ",
+        "         predicted_ctr_champion * impressions AS pred_champ_weighted ",
+        "  FROM gold_ctr_predictions ",
+        ") GROUP BY event_week ORDER BY event_week"
+      ]
+    },
+    {
+      "name": "ds_channel_mix",
+      "displayName": "Channel mix + CTR",
+      "queryLines": [
+        "SELECT event_week, event_date, channel, ",
+        "       SUM(impressions) AS impressions, ",
+        "       SUM(clicks) / SUM(impressions) AS ctr, ",
+        "       SUM(spend_usd) AS spend_usd, ",
+        "       MAX(is_drift_window) AS is_drift_window ",
+        "FROM gold_campaign_daily ",
+        "GROUP BY event_week, event_date, channel ORDER BY event_week, channel"
+      ]
+    },
+    {
+      "name": "ds_segment_gap",
+      "displayName": "Segment prediction gaps",
+      "queryLines": [
+        "SELECT p.event_date, p.channel, p.device, p.country, p.visitor_type, p.campaign_name, p.objective, ",
+        "       p.impressions, p.spend_usd, p.actual_ctr, p.predicted_ctr_stale, p.predicted_ctr_champion, ",
+        "       p.ctr_gap_stale, p.ctr_gap_champion, p.is_drift_window, p.is_drift_segment, ",
+        "       CASE WHEN p.is_drift_window AND p.is_drift_segment ",
+        "            THEN p.spend_usd * greatest(0, 1 - p.actual_ctr / nullif(b.baseline_ctr, 0)) ELSE 0 END AS wasted_spend_usd ",
+        "FROM gold_ctr_predictions p ",
+        "LEFT JOIN (SELECT campaign_id, SUM(clicks) / SUM(impressions) AS baseline_ctr FROM gold_segment_ctr_daily WHERE is_drift_window = FALSE GROUP BY campaign_id) b ",
+        "  ON p.campaign_id = b.campaign_id"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "spend_drift",
+      "displayName": "Spend & Drift",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# NorthPeak Goods \u2014 CTR Optimization: Spend & Drift\n",
+                "\n",
+                "**What happened:** three weeks ago marketing shifted budget from Search to **Social + Display** (impression share jumped from ~20% to ~50%). Those prospecting/awareness segments reach colder audiences, so their true CTR collapsed \u2014 but the **stale production model** kept predicting the old ~2.4% rate, so the bidding system over-bid and burned **~$242K**.\n",
+                "\n",
+                "**On this page:** the top line shows the stale model's prediction (orange) staying flat while actual CTR (navy) falls \u2014 that widening gap is the wasted spend. The area chart shows the Social/Display mix swelling; the bars show where CTR collapsed and where the waste concentrated."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_wasted_spend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "sum(wasted_spend_usd)",
+                      "expression": "SUM(`wasted_spend_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(wasted_spend_usd)",
+                  "displayName": "Wasted spend",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "title": "Wasted spend (drift window)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_blended_ctr",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "blended_ctr",
+                      "expression": "SUM(`clicks`) / SUM(`impressions`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "blended_ctr",
+                  "displayName": "Blended CTR",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "title": "Blended CTR",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_impressions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "sum(impressions)",
+                      "expression": "SUM(`impressions`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(impressions)",
+                  "displayName": "Impressions",
+                  "format": {
+                    "type": "number",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "title": "Impressions",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_cvr",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "cvr",
+                      "expression": "SUM(`conversions`) / SUM(`clicks`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "cvr",
+                  "displayName": "Conversion rate",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "title": "Conversion rate (CVR)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "pred_actual_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_pred_actual",
+                  "fields": [
+                    {
+                      "name": "event_week",
+                      "expression": "`event_week`"
+                    },
+                    {
+                      "name": "actual_ctr",
+                      "expression": "`actual_ctr`"
+                    },
+                    {
+                      "name": "predicted_ctr_stale",
+                      "expression": "`predicted_ctr_stale`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "event_week",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Week"
+                },
+                "y": {
+                  "fieldName": "actual_ctr",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "CTR",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "actual_ctr",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "predicted_ctr_stale",
+                        "color": "#FE9000"
+                      }
+                    ]
+                  }
+                }
+              },
+              "annotations": [
+                {
+                  "type": "vertical-line",
+                  "encodings": {
+                    "x": {
+                      "dataValue": "2026-08-18T00:00:00.000",
+                      "dataType": "DATETIME"
+                    },
+                    "label": {
+                      "value": "Campaign mix shift"
+                    }
+                  }
+                }
+              ],
+              "frame": {
+                "showTitle": true,
+                "title": "Predicted (stale) vs actual CTR \u2014 the divergence"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "channel_mix_area",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_channel_mix",
+                  "fields": [
+                    {
+                      "name": "weekly(event_date)",
+                      "expression": "DATE_TRUNC(\"WEEK\", `event_date`)"
+                    },
+                    {
+                      "name": "sum(impressions)",
+                      "expression": "SUM(`impressions`)"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "area",
+              "encodings": {
+                "x": {
+                  "fieldName": "weekly(event_date)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Week"
+                },
+                "y": {
+                  "fieldName": "sum(impressions)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Impressions"
+                },
+                "color": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Search",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "Email",
+                        "color": "#3C6997"
+                      },
+                      {
+                        "value": "Affiliate",
+                        "color": "#5ADBFF"
+                      },
+                      {
+                        "value": "Social",
+                        "color": "#FFDD4A"
+                      },
+                      {
+                        "value": "Display",
+                        "color": "#FE9000"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Weekly impressions by channel \u2014 the mix shift"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 7,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "ctr_by_channel_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_channel_mix",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "ctr",
+                      "expression": "SUM(`impressions` * `ctr`) / SUM(`impressions`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Channel"
+                },
+                "y": {
+                  "fieldName": "ctr",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "CTR",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Search",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "Email",
+                        "color": "#3C6997"
+                      },
+                      {
+                        "value": "Affiliate",
+                        "color": "#5ADBFF"
+                      },
+                      {
+                        "value": "Social",
+                        "color": "#FFDD4A"
+                      },
+                      {
+                        "value": "Display",
+                        "color": "#FE9000"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "CTR by channel \u2014 Social & Display lowest"
+              }
+            }
+          },
+          "position": {
+            "x": 7,
+            "y": 11,
+            "width": 5,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "wasted_by_channel_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "sum(wasted_spend_usd)",
+                      "expression": "SUM(`wasted_spend_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "y": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Channel"
+                },
+                "x": {
+                  "fieldName": "sum(wasted_spend_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Wasted spend",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Search",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "Email",
+                        "color": "#3C6997"
+                      },
+                      {
+                        "value": "Affiliate",
+                        "color": "#5ADBFF"
+                      },
+                      {
+                        "value": "Social",
+                        "color": "#FFDD4A"
+                      },
+                      {
+                        "value": "Display",
+                        "color": "#FE9000"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Wasted spend by channel \u2014 Social & Display dominate"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 12,
+            "height": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "model_recovery",
+      "displayName": "Model & Recovery",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "title2",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Model & Recovery \u2014 the retrained champion\n",
+                "\n",
+                "Maya reran the **standardized batch training workflow**: engineer feature sets \u2192 train XGBoost CTR-regression candidates \u2192 tune with Optuna \u2192 log every run to **MLflow** \u2192 register the winner in **Unity Catalog** and promote the **`@champion`** alias. The champion learned the new Social/Display reality, so its predictions track actual CTR again.\n",
+                "\n",
+                "**On this page:** the top line shows the champion (cyan) snapping onto actual CTR (navy) even through the drift window, where the stale model (orange) stayed wrong. The gap bars quantify the fix per channel, and the table lists the exact mis-bid segments the retrain corrected. The MLflow experiment leaderboard + feature importance are shown live in the notebook."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "both_models_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_pred_actual",
+                  "fields": [
+                    {
+                      "name": "event_week",
+                      "expression": "`event_week`"
+                    },
+                    {
+                      "name": "actual_ctr",
+                      "expression": "`actual_ctr`"
+                    },
+                    {
+                      "name": "predicted_ctr_stale",
+                      "expression": "`predicted_ctr_stale`"
+                    },
+                    {
+                      "name": "predicted_ctr_champion",
+                      "expression": "`predicted_ctr_champion`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "event_week",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Week"
+                },
+                "y": {
+                  "fieldName": "actual_ctr",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "CTR",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "actual_ctr",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "predicted_ctr_stale",
+                        "color": "#FE9000"
+                      },
+                      {
+                        "value": "predicted_ctr_champion",
+                        "color": "#5ADBFF"
+                      }
+                    ]
+                  }
+                }
+              },
+              "annotations": [
+                {
+                  "type": "vertical-line",
+                  "encodings": {
+                    "x": {
+                      "dataValue": "2026-08-18T00:00:00.000",
+                      "dataType": "DATETIME"
+                    },
+                    "label": {
+                      "value": "Campaign mix shift"
+                    }
+                  }
+                }
+              ],
+              "frame": {
+                "showTitle": true,
+                "title": "Champion tracks actual CTR; stale model stayed wrong"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "gap_by_channel",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "avg_abs_stale",
+                      "expression": "AVG(ABS(`ctr_gap_stale`))"
+                    },
+                    {
+                      "name": "avg_abs_champion",
+                      "expression": "AVG(ABS(`ctr_gap_champion`))"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Channel"
+                },
+                "y": {
+                  "fieldName": "avg_abs_stale",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Avg |prediction gap|",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "avg_abs_stale",
+                        "color": "#FE9000"
+                      },
+                      {
+                        "value": "avg_abs_champion",
+                        "color": "#5ADBFF"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prediction gap by channel: stale (orange) vs champion (cyan)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "ctr_lift_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "accuracy_lift",
+                      "expression": "AVG(ABS(`ctr_gap_stale`)) - AVG(ABS(`ctr_gap_champion`))"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Channel"
+                },
+                "y": {
+                  "fieldName": "accuracy_lift",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "CTR-accuracy lift",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Search",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "Email",
+                        "color": "#3C6997"
+                      },
+                      {
+                        "value": "Affiliate",
+                        "color": "#5ADBFF"
+                      },
+                      {
+                        "value": "Social",
+                        "color": "#FFDD4A"
+                      },
+                      {
+                        "value": "Display",
+                        "color": "#FE9000"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "CTR-accuracy lift by channel \u2014 biggest on Social & Display"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 8,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "top_segments_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "campaign_name",
+                      "expression": "`campaign_name`"
+                    },
+                    {
+                      "name": "device",
+                      "expression": "`device`"
+                    },
+                    {
+                      "name": "country",
+                      "expression": "`country`"
+                    },
+                    {
+                      "name": "avg_actual",
+                      "expression": "AVG(`actual_ctr`)"
+                    },
+                    {
+                      "name": "avg_stale",
+                      "expression": "AVG(`predicted_ctr_stale`)"
+                    },
+                    {
+                      "name": "avg_champ",
+                      "expression": "AVG(`predicted_ctr_champion`)"
+                    },
+                    {
+                      "name": "avg_gap_stale",
+                      "expression": "AVG(`ctr_gap_stale`)"
+                    },
+                    {
+                      "name": "sum_wasted",
+                      "expression": "SUM(`wasted_spend_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Channel"
+                  },
+                  {
+                    "fieldName": "campaign_name",
+                    "displayName": "Campaign"
+                  },
+                  {
+                    "fieldName": "device",
+                    "displayName": "Device"
+                  },
+                  {
+                    "fieldName": "country",
+                    "displayName": "Country"
+                  },
+                  {
+                    "fieldName": "avg_actual",
+                    "displayName": "Actual CTR",
+                    "format": {
+                      "type": "number-percent",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 2
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "avg_stale",
+                    "displayName": "Stale pred.",
+                    "format": {
+                      "type": "number-percent",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 2
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "avg_champ",
+                    "displayName": "Champion pred.",
+                    "format": {
+                      "type": "number-percent",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 2
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "avg_gap_stale",
+                    "displayName": "Stale gap",
+                    "format": {
+                      "type": "number-percent",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 2
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "sum_wasted",
+                    "displayName": "Wasted $",
+                    "format": {
+                      "type": "number-currency",
+                      "currencyCode": "USD",
+                      "abbreviation": "compact",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Worst mis-bid segments (sorted by stale gap)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 12,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "filters",
+      "displayName": "Filters",
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_date",
+            "queries": [
+              {
+                "name": "f_kpi",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "event_date",
+                      "expression": "`event_date`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_mix",
+                "query": {
+                  "datasetName": "ds_channel_mix",
+                  "fields": [
+                    {
+                      "name": "event_date",
+                      "expression": "`event_date`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_gap",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "event_date",
+                      "expression": "`event_date`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "event_date",
+                    "queryName": "f_kpi"
+                  },
+                  {
+                    "fieldName": "event_date",
+                    "queryName": "f_mix"
+                  },
+                  {
+                    "fieldName": "event_date",
+                    "queryName": "f_gap"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_channel",
+            "queries": [
+              {
+                "name": "fc_mix",
+                "query": {
+                  "datasetName": "ds_channel_mix",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "fc_gap",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "channel",
+                    "queryName": "fc_mix",
+                    "displayName": "Channel"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "queryName": "fc_gap"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Channel"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_country",
+            "queries": [
+              {
+                "name": "fco_gap",
+                "query": {
+                  "datasetName": "ds_segment_gap",
+                  "fields": [
+                    {
+                      "name": "country",
+                      "expression": "`country`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "country",
+                    "queryName": "fco_gap",
+                    "displayName": "Country"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Country"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": {
+        "light": "#F5F7FB",
+        "dark": "#0F1419"
+      },
+      "widgetBackgroundColor": {
+        "light": "#FFFFFF",
+        "dark": "#161B22"
+      },
+      "widgetBorderColor": {
+        "light": "#FFFFFF",
+        "dark": "#161B22"
+      },
+      "fontColor": {
+        "light": "#1F2530",
+        "dark": "#E8ECF0"
+      },
+      "selectionColor": {
+        "light": "#4F7CE3",
+        "dark": "#8ACAFF"
+      },
+      "visualizationColors": [
+        "#094074",
+        "#3C6997",
+        "#5ADBFF",
+        "#FFDD4A",
+        "#FE9000"
+      ],
+      "widgetHeaderAlignment": "LEFT"
+    },
+    "genieSpace": {
+      "isEnabled": true,
+      "overrideId": "01f1ab974de6124eb6533ad0625849bf",
+      "enablementMode": "ENABLED"
+    }
+  }
+}

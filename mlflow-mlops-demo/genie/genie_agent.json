@@ -1,0 +1,137 @@
+{
+  "version": 2,
+  "config": {
+    "sample_questions": [
+      {
+        "id": "10000000000000000000000000000001",
+        "question": [
+          "Which channels have the biggest gap between predicted and actual CTR in the last 3 weeks?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000002",
+        "question": [
+          "How did the impression mix by channel change over the last 90 days?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000003",
+        "question": [
+          "Show weekly actual CTR for Social and Display segments."
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000004",
+        "question": [
+          "How much wasted spend did the CTR drift cause?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000005",
+        "question": [
+          "By channel, how does the champion model's prediction gap compare to the stale model's?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000006",
+        "question": [
+          "Is the champion model's predicted CTR now tracking actuals?"
+        ]
+      }
+    ]
+  },
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "solution_builder.demo_mlflow_logged_ctr_optimization.gold_campaign_daily"
+      },
+      {
+        "identifier": "solution_builder.demo_mlflow_logged_ctr_optimization.gold_ctr_predictions"
+      },
+      {
+        "identifier": "solution_builder.demo_mlflow_logged_ctr_optimization.gold_segment_ctr_daily"
+      },
+      {
+        "identifier": "solution_builder.demo_mlflow_logged_ctr_optimization.raw_campaigns"
+      }
+    ]
+  },
+  "instructions": {
+    "example_question_sqls": [
+      {
+        "id": "20000000000000000000000000000001",
+        "question": [
+          "Which channels have the biggest gap between predicted and actual CTR in the last 3 weeks?"
+        ],
+        "sql": [
+          "SELECT channel,\n",
+          "       ROUND(AVG(ctr_gap_stale), 4) AS avg_stale_gap,\n",
+          "       ROUND(AVG(actual_ctr), 4)    AS avg_actual_ctr\n",
+          "FROM solution_builder.demo_mlflow_logged_ctr_optimization.gold_ctr_predictions\n",
+          "WHERE is_drift_window = TRUE\n",
+          "GROUP BY channel\n",
+          "ORDER BY avg_stale_gap DESC"
+        ]
+      },
+      {
+        "id": "20000000000000000000000000000002",
+        "question": [
+          "How did the impression mix by channel change over the last 90 days?"
+        ],
+        "sql": [
+          "SELECT event_week, channel,\n",
+          "       SUM(impressions) AS impressions\n",
+          "FROM solution_builder.demo_mlflow_logged_ctr_optimization.gold_campaign_daily\n",
+          "GROUP BY event_week, channel\n",
+          "ORDER BY event_week, channel"
+        ]
+      },
+      {
+        "id": "20000000000000000000000000000003",
+        "question": [
+          "By channel, how does the champion model's prediction gap compare to the stale model's?"
+        ],
+        "sql": [
+          "SELECT channel,\n",
+          "       ROUND(AVG(ABS(ctr_gap_stale)), 4)    AS avg_abs_stale_gap,\n",
+          "       ROUND(AVG(ABS(ctr_gap_champion)), 4) AS avg_abs_champion_gap\n",
+          "FROM solution_builder.demo_mlflow_logged_ctr_optimization.gold_ctr_predictions\n",
+          "WHERE is_drift_window = TRUE\n",
+          "GROUP BY channel\n",
+          "ORDER BY avg_abs_stale_gap DESC"
+        ]
+      },
+      {
+        "id": "20000000000000000000000000000004",
+        "question": [
+          "How much wasted spend did the CTR drift cause?"
+        ],
+        "sql": [
+          "SELECT ROUND(SUM(p.spend_usd * GREATEST(0, 1 - p.actual_ctr / NULLIF(b.baseline_ctr, 0))), 0) AS wasted_spend_usd\n",
+          "FROM solution_builder.demo_mlflow_logged_ctr_optimization.gold_ctr_predictions p\n",
+          "JOIN (SELECT campaign_id, SUM(clicks) / SUM(impressions) AS baseline_ctr\n",
+          "      FROM solution_builder.demo_mlflow_logged_ctr_optimization.gold_segment_ctr_daily\n",
+          "      WHERE is_drift_window = FALSE GROUP BY campaign_id) b\n",
+          "  ON p.campaign_id = b.campaign_id\n",
+          "WHERE p.is_drift_window = TRUE AND p.is_drift_segment = TRUE"
+        ]
+      }
+    ],
+    "text_instructions": [
+      {
+        "id": "30000000000000000000000000000001",
+        "content": [
+          "You analyze NorthPeak Goods paid-acquisition CTR data for Maya, the Growth Analytics Lead. Be concise and business-focused.\n",
+          "WHAT HAPPENED: A campaign mix shift ~21 days ago moved budget from Search to Social + Display. Those prospecting/awareness segments' true CTR collapsed from ~2.4% toward ~1.0% and below. The stale production model (trained before the shift) kept predicting the old rate, so the bidding system over-bid on them, wasting ~$240K over three weeks. A retrained champion model now tracks actual CTR again.\n",
+          "KEY METRICS:\n",
+          "- CTR = clicks / impressions. Use gold_segment_ctr_daily (segment grain) or gold_campaign_daily (campaign/channel grain, has blended_ctr).\n",
+          "- Predicted vs actual gap = ctr_gap_stale (predicted_ctr_stale - actual_ctr) in gold_ctr_predictions. Large + positive on drift segments = the over-bidding. ctr_gap_champion is the retrained model's gap and is near zero.\n",
+          "- is_drift_window = TRUE marks the last 21 days. is_drift_segment = TRUE marks the Social/Display prospecting/awareness cohort that broke.\n",
+          "WASTED SPEND (~$242K, concentrated in Social and Display): the drift-window spend on the mis-bid cohort that bought clicks at the pre-drift CTR the bidding system still assumed. Compute it as: JOIN gold_ctr_predictions p to each campaign's pre-drift baseline CTR b = (SELECT campaign_id, SUM(clicks)/SUM(impressions) AS baseline_ctr FROM gold_segment_ctr_daily WHERE is_drift_window = FALSE GROUP BY campaign_id), then SUM(p.spend_usd * GREATEST(0, 1 - p.actual_ctr/NULLIF(b.baseline_ctr,0))) WHERE p.is_drift_window = TRUE AND p.is_drift_segment = TRUE. This is the dashboard's wasted-spend number.\n",
+          "INVESTIGATION FLOW for 'why did CTR accuracy drift?': (1) gold_campaign_daily weekly impression share by channel -> Social+Display jump from ~20% to ~50%; (2) gold_segment_ctr_daily weekly actual_ctr for Social/Display -> collapses; (3) gold_ctr_predictions ctr_gap_stale by channel -> stale model over-predicts most on Social/Display; (4) gold_ctr_predictions ctr_gap_champion ~ 0 -> the retrained champion fixed it.\n",
+          "For 'recent' / 'last 3 weeks', filter is_drift_window = TRUE. raw_campaigns holds campaign objective (conversion/awareness/retargeting) and channel mapping."
+        ]
+      }
+    ]
+  }
+}

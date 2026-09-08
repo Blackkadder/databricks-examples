@@ -1,0 +1,26 @@
+{
+  "capabilities": {
+    "buildable": [
+      "synthetic-data-gen",
+      "ml-training-serving",
+      "aibi-dashboards",
+      "genie"
+    ],
+    "talking_track": [
+      "genie-code",
+      "genie-one",
+      "lakeflow-connect",
+      "unity-catalog"
+    ]
+  },
+  "created_resources": {
+    "workspace_folder": "/Workspace/Users/2301685f-87d8-4a01-9f27-b105951ab400/mlflow_ctr_optimization",
+    "catalog": "solution_builder",
+    "schema": "demo_mlflow_logged_ctr_optimization",
+    "warehouse_id": "a94beda3aab06fa4",
+    "ml_model_name": "solution_builder.demo_mlflow_logged_ctr_optimization.ctr_regressor",
+    "mlflow_experiment_path": "/Users/2301685f-87d8-4a01-9f27-b105951ab400/mlflow_ctr_optimization/experiments/ctr_regressor",
+    "genie_space_id": "01f1ab974de6124eb6533ad0625849bf",
+    "dashboard_id": "01f1ab98bd911eef89a8f2256d0361d1"
+  }
+}
