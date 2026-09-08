@@ -1,0 +1,6 @@
+resources:
+  schemas:
+    ctr_schema:
+      name: ${var.schema}
+      catalog_name: ${var.catalog}
+      comment: NorthPeak Goods CTR optimization data, models, and predictions

@@ -55,7 +55,15 @@ from mlflow.models.signature import infer_signature
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 mlflow.set_registry_uri("databricks-uc")
-mlflow.set_experiment(EXPERIMENT_PATH)
+if EXPERIMENT_PATH:
+    # set_experiment does NOT create the parent workspace folder — pre-create it.
+    try:
+        import os as _os
+        from databricks.sdk import WorkspaceClient
+        WorkspaceClient().workspace.mkdirs(_os.path.dirname(EXPERIMENT_PATH))
+    except Exception as e:
+        print(f"(experiment folder pre-create skipped: {e})")
+    mlflow.set_experiment(EXPERIMENT_PATH)
 
 # Pull the segment-day actuals to pandas (small: ~40K rows).
 sdf = spark.table(f"{CATALOG}.{SCHEMA}.gold_segment_ctr_daily")
@@ -157,7 +165,7 @@ train_idx, val_idx = train_test_split(full.index, test_size=0.2, random_state=7)
 val_cohort_mask = ((full.loc[val_idx, "is_drift_segment"] == True) &
                    (full.loc[val_idx, "is_drift_window"] == 1)).values
 
-def evaluate_feature_set(fs_name, feats, n_trials=8):
+def evaluate_feature_set(fs_name, feats, n_trials=4):
     X_all = build_xy(full, feats)
     cols = list(X_all.columns)
     Xtr, Xval = X_all.loc[train_idx], X_all.loc[val_idx]

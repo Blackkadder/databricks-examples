@@ -17,6 +17,25 @@
 
 Maya opens her Monday dashboard and sees the model powering NorthPeak's bid decisions has drifted: predicted CTR no longer tracks actuals, and the gap opened ~3 weeks ago when marketing shifted budget from Search toward Social + Display. The stale model over-bid on the new campaign mix, burning **$240K** in three weeks.
 
+## Repository layout
+
+The bundle configuration, executable jobs, demo notebooks, and reusable library code are intentionally separated:
+
+```text
+resources/                 Databricks schemas, dashboards, and job definitions
+src/jobs/                  Plain Python job entrypoints
+src/notebooks/             Interactive, educational workflow notebooks
+src/northpeak_mlops/       Reusable training, registry, deployment, and scoring helpers
+src/dashboard/             AI/BI dashboard source
+src/genie/                 Genie space source
+tests/                     Local unit tests
+```
+
+There are two complementary jobs:
+
+- **NorthPeak CTR Setup** uses notebooks to make the MLflow primitives visible during the demo. It generates data, trains and scores the initial models, and deploys Genie.
+- **NorthPeak CTR Retrain** uses a plain `.py` task. Its entrypoint imports `train_model`, `register_model`, `deploy_model`, and `batch_score_model`; direct MLflow calls remain encapsulated in the reusable library. A quality gate protects the current `@champion` alias from weaker candidates.
+
 Instead of hand-patching a notebook, Maya runs a **standardized batch training workflow**. The workflow engineers features from ad-impression logs — new vs. returning visitor, channel, geography, device, campaign, hour-of-day — and trains several **XGBoost regression candidates** to predict click-through rate. Every run is captured in **MLflow**: parameters, the exact feature set, validation metrics (RMSE, MAE, R²), feature importance, and the model artifact. Hyperparameter tuning trials all log to one experiment, so the leaderboard ranks candidates and the best run is obvious.
 
 She reviews validation lift, feature importance (the campaign-mix features now dominate), and the drift trend, then **promotes the winning model version** to the UC registry with a `@champion` alias. The same notebook **batch-scores** every segment into a Gold predictions table. Dashboards then show segment-level CTR lift (predicted vs. actual), the drift that triggered the retrain collapsing back to zero, and conversion-value recovery.

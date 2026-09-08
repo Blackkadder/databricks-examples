@@ -5,7 +5,7 @@
 **Skill**: `databricks-synthetic-data-gen` — read `SKILLS/databricks-synthetic-data-gen/SKILL.md` first.
 **Runtime**: pre-provisioned databricks-connect venv (path in system prompt). Do NOT create a new venv.
 **Location**: `solution_builder.demo_mlflow_logged_ctr_optimization` (catalog.schema from `resources.json`).
-**Script path**: `PROJECT/data_generation/generate_data.py`.
+**Script path**: `PROJECT/src/notebooks/generate_data.py`.
 
 ---
 

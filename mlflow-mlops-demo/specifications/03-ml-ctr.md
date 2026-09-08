@@ -47,7 +47,7 @@ Same notebook trains AND scores. After promoting `@champion`, batch-score **ever
 
 ## Execution
 
-One Databricks notebook at `PROJECT/ml/ctr_train_score.py` doing: load features → engineer 3 feature sets → train stale (pre-drift) model + register v1 → train champion candidates with Optuna across the 3 feature sets (all MLflow-logged) → pick best by validation RMSE → register new version + set `@champion` → batch-score both models → write `gold_ctr_predictions` → `dbutils.notebook.exit(json.dumps({champion_version, champion_rmse, stale_rmse, rmse_improvement_pct, segments_scored, top_features}))`. Uploaded to the workspace folder, run as a **serverless job** (~10–15 min). Never run locally.
+One Databricks notebook at `PROJECT/src/notebooks/ctr_train_score.py` doing: load features → engineer 3 feature sets → train stale (pre-drift) model + register v1 → train champion candidates with Optuna across the 3 feature sets (all MLflow-logged) → pick best by validation RMSE → register new version + set `@champion` → batch-score both models → write `gold_ctr_predictions` → `dbutils.notebook.exit(json.dumps({champion_version, champion_rmse, stale_rmse, rmse_improvement_pct, segments_scored, top_features}))`. Uploaded to the workspace folder, run as a **serverless job** (~10–15 min). Never run locally.
 
 **Notebook-source format required** (`# Databricks notebook source`, `# MAGIC %md` headers, `# COMMAND ----------` cell separators) so cells render in the workspace and the MLflow experiment UI is demo-able.
 

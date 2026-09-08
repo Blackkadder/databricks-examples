@@ -1,0 +1,8 @@
+resources:
+  dashboards:
+    ctr_dashboard:
+      display_name: "[${bundle.target}] NorthPeak CTR Optimization"
+      file_path: ../src/dashboard/dashboard.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${resources.schemas.ctr_schema.catalog_name}
+      dataset_schema: ${resources.schemas.ctr_schema.name}

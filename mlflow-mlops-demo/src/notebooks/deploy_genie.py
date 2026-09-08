@@ -66,7 +66,7 @@ import os
 from databricks.sdk import WorkspaceClient
 
 # Locate genie_space.json (committed at src/genie/genie_space.json relative to
-# the bundle root; this notebook lives at src/deploy/).
+# the bundle root; this notebook lives at src/notebooks/).
 notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 bundle_root   = os.path.dirname(os.path.dirname(os.path.dirname(notebook_path)))
 config_path   = f"/Workspace{bundle_root}/src/genie/genie_space.json"

@@ -1,0 +1,54 @@
+resources:
+  jobs:
+    # Keep this resource key stable so bundle deploy updates the existing job.
+    northpeak_ctr_setup:
+      name: "[${bundle.target}] NorthPeak CTR Setup"
+      description: Generate data, run the educational notebook retrain, and deploy Genie
+      tasks:
+        - task_key: generate_data
+          notebook_task:
+            notebook_path: ../src/notebooks/generate_data.py
+            base_parameters:
+              catalog: ${resources.schemas.ctr_schema.catalog_name}
+              schema: ${resources.schemas.ctr_schema.name}
+          environment_key: sdk_default
+
+        - task_key: train_score_ml
+          depends_on:
+            - task_key: generate_data
+          notebook_task:
+            notebook_path: ../src/notebooks/ctr_train_score.py
+            base_parameters:
+              catalog: ${resources.schemas.ctr_schema.catalog_name}
+              schema: ${resources.schemas.ctr_schema.name}
+              experiment_path: /Users/${workspace.current_user.userName}/${bundle.target}_northpeak_ctr/experiments/ctr_regressor
+          environment_key: ml
+
+        - task_key: deploy_genie
+          depends_on:
+            - task_key: train_score_ml
+          notebook_task:
+            notebook_path: ../src/notebooks/deploy_genie.py
+            base_parameters:
+              catalog: ${resources.schemas.ctr_schema.catalog_name}
+              schema: ${resources.schemas.ctr_schema.name}
+              warehouse_id: ${var.warehouse_id}
+          environment_key: sdk_latest
+
+      environments:
+        - environment_key: sdk_default
+          spec:
+            client: "4"
+        - environment_key: ml
+          spec:
+            client: "4"
+            dependencies:
+              - xgboost==2.1.3
+              - scikit-learn==1.5.2
+              - optuna==4.1.0
+              - mlflow>=2.13.0
+        - environment_key: sdk_latest
+          spec:
+            client: "4"
+            dependencies:
+              - databricks-sdk>=0.114.0

@@ -1,0 +1,54 @@
+categorical_features:
+  - channel
+  - device
+  - country
+  - visitor_type
+  - campaign_id
+  - objective
+
+feature_sets:
+  fs_a_core:
+    - channel
+    - device
+    - country
+    - visitor_type
+  fs_b_campaign:
+    - channel
+    - device
+    - country
+    - visitor_type
+    - campaign_id
+    - objective
+  fs_c_full:
+    - channel
+    - device
+    - country
+    - visitor_type
+    - campaign_id
+    - objective
+    - day_of_week
+    - impressions
+    - is_drift_window
+
+xgboost_search_space:
+  n_estimators:
+    type: int
+    low: 150
+    high: 500
+  max_depth:
+    type: int
+    low: 3
+    high: 9
+  learning_rate:
+    type: float
+    low: 0.02
+    high: 0.25
+    log: true
+  subsample:
+    type: float
+    low: 0.7
+    high: 1.0
+  colsample_bytree:
+    type: float
+    low: 0.7
+    high: 1.0

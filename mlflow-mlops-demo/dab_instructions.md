@@ -2,6 +2,8 @@
 
 Workflow-only bundle (no App / Lakebase / KA / MAS), so the deploy is two commands.
 
+Bundle resource definitions live under `resources/`. Executable Python entrypoints live under `src/jobs/`, interactive notebooks under `src/notebooks/`, and reusable MLOps helpers under `src/northpeak_mlops/`.
+
 **Prerequisites:** Databricks CLI **v0.283.0+** (dashboard `dataset_catalog`/`dataset_schema` rebinding). Auth via a configured CLI profile (`--profile <name>` if not default). A running SQL warehouse for the dashboard + Genie space.
 
 ```bash
@@ -19,6 +21,17 @@ databricks bundle run northpeak_ctr_setup \
   --var schema=demo_mlflow_logged_ctr_optimization \
   --var warehouse_id=<your_warehouse_id>
 ```
+
+After the setup job has created the source tables and initial champion, run the separate plain-Python retraining job with:
+
+```bash
+databricks bundle run northpeak_ctr_retrain \
+  --var catalog=solution_builder \
+  --var schema=demo_mlflow_logged_ctr_optimization \
+  --var warehouse_id=<your_warehouse_id>
+```
+
+The retraining entrypoint imports helper functions for training, registration, guarded `@champion` promotion, and batch scoring. It does not call MLflow primitives directly.
 
 `dev` (default) prefixes the schema with `dev_<user>_` and resource names with `[dev <user>]`. For a shared/prod deploy add `-t prod` to both commands.
 
