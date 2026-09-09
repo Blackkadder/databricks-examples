@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 import mlflow
 import numpy as np
 import optuna
 import pandas as pd
-from databricks.sdk import WorkspaceClient
 from mlflow.models.signature import infer_signature
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
@@ -21,7 +19,7 @@ from .features import FEATURE_SETS, build_features
 
 @dataclass(frozen=True)
 class TrainingConfig:
-    experiment_path: str
+    experiment_id: str
     n_trials: int = 4
     random_seed: int = 42
 
@@ -39,17 +37,16 @@ class TrainingResult:
     top_features: list[str]
 
 
-def _configure_tracking(experiment_path: str) -> None:
+def _configure_tracking(experiment_id: str) -> None:
     mlflow.set_registry_uri("databricks-uc")
-    WorkspaceClient().workspace.mkdirs(os.path.dirname(experiment_path))
-    mlflow.set_experiment(experiment_path)
+    mlflow.set_experiment(experiment_id=experiment_id)
     mlflow.xgboost.autolog(log_input_examples=False, log_models=False, silent=True)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
 def train_model(frame: pd.DataFrame, config: TrainingConfig) -> TrainingResult:
     """Tune feature sets, log candidates, and return one logged final model."""
-    _configure_tracking(config.experiment_path)
+    _configure_tracking(config.experiment_id)
     target = frame["actual_ctr"].to_numpy()
     weights = frame["impressions"].to_numpy()
     train_weights = weights * np.where(frame["is_drift_window"].to_numpy() == 1, 4.0, 1.0)

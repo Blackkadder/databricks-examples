@@ -22,15 +22,15 @@
 
 dbutils.widgets.text("catalog", "solution_builder", "Catalog")
 dbutils.widgets.text("schema", "demo_mlflow_logged_ctr_optimization", "Schema")
-dbutils.widgets.text("experiment_path", "", "MLflow experiment path")
+dbutils.widgets.text("experiment_id", "", "MLflow experiment ID")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
-EXPERIMENT_PATH = dbutils.widgets.get("experiment_path")
+EXPERIMENT_ID = dbutils.widgets.get("experiment_id")
 
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.ctr_regressor"
 print(f"Model: {MODEL_NAME}")
-print(f"Experiment: {EXPERIMENT_PATH}")
+print(f"Experiment ID: {EXPERIMENT_ID}")
 
 # COMMAND ----------
 # MAGIC %md
@@ -55,15 +55,8 @@ from mlflow.models.signature import infer_signature
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 mlflow.set_registry_uri("databricks-uc")
-if EXPERIMENT_PATH:
-    # set_experiment does NOT create the parent workspace folder — pre-create it.
-    try:
-        import os as _os
-        from databricks.sdk import WorkspaceClient
-        WorkspaceClient().workspace.mkdirs(_os.path.dirname(EXPERIMENT_PATH))
-    except Exception as e:
-        print(f"(experiment folder pre-create skipped: {e})")
-    mlflow.set_experiment(EXPERIMENT_PATH)
+if EXPERIMENT_ID:
+    mlflow.set_experiment(experiment_id=EXPERIMENT_ID)
 
 # Pull the segment-day actuals to pandas (small: ~40K rows).
 sdf = spark.table(f"{CATALOG}.{SCHEMA}.gold_segment_ctr_daily")

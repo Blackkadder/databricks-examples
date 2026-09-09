@@ -64,6 +64,34 @@
         "LEFT JOIN (SELECT campaign_id, SUM(clicks) / SUM(impressions) AS baseline_ctr FROM gold_segment_ctr_daily WHERE is_drift_window = FALSE GROUP BY campaign_id) b ",
         "  ON p.campaign_id = b.campaign_id"
       ]
+    },
+    {
+      "name": "ds_health_latest",
+      "displayName": "Latest 7-day model health",
+      "queryLines": [
+        "SELECT metric_date, model_version, actual_ctr, predicted_ctr, weighted_rmse, weighted_mae, signed_bias, absolute_ctr_gap, baseline_rmse, rmse_change_pct, drift_status, observation_count, impressions FROM gold_model_monitoring_metrics WHERE dimension_name = 'overall' AND dimension_value = 'All' AND window_days = 7 AND metric_date = (SELECT MAX(metric_date) FROM gold_model_monitoring_metrics)"
+      ]
+    },
+    {
+      "name": "ds_health_trend",
+      "displayName": "7-day overall model health trend",
+      "queryLines": [
+        "SELECT metric_date, actual_ctr, predicted_ctr, weighted_rmse, weighted_mae, baseline_rmse, rmse_change_pct, drift_status FROM gold_model_monitoring_metrics WHERE dimension_name = 'overall' AND dimension_value = 'All' AND window_days = 7 ORDER BY metric_date"
+      ]
+    },
+    {
+      "name": "ds_health_slices",
+      "displayName": "Latest 7-day model health by slice",
+      "queryLines": [
+        "SELECT metric_date, dimension_name, dimension_value, CONCAT(dimension_name, ': ', dimension_value) AS slice_name, model_version, actual_ctr, predicted_ctr, weighted_rmse, weighted_mae, signed_bias, absolute_ctr_gap, baseline_rmse, rmse_change_pct, drift_status, observation_count, impressions FROM gold_model_monitoring_metrics WHERE dimension_name <> 'overall' AND window_days = 7 AND metric_date = (SELECT MAX(metric_date) FROM gold_model_monitoring_metrics)"
+      ]
+    },
+    {
+      "name": "ds_retrain_decisions",
+      "displayName": "Automated retraining decisions",
+      "queryLines": [
+        "SELECT evaluated_at, metric_date, weighted_rmse, baseline_rmse, rmse_change_pct, impressions, should_retrain, reason FROM model_retrain_decisions ORDER BY evaluated_at DESC"
+      ]
     }
   ],
   "pages": [
@@ -78,11 +106,11 @@
             "name": "title",
             "multilineTextboxSpec": {
               "lines": [
-                "# NorthPeak Goods \u2014 CTR Optimization: Spend & Drift\n",
+                "# NorthPeak Goods — CTR Optimization: Spend & Drift\n",
                 "\n",
-                "**What happened:** three weeks ago marketing shifted budget from Search to **Social + Display** (impression share jumped from ~20% to ~50%). Those prospecting/awareness segments reach colder audiences, so their true CTR collapsed \u2014 but the **stale production model** kept predicting the old ~2.4% rate, so the bidding system over-bid and burned **~$242K**.\n",
+                "**What happened:** three weeks ago marketing shifted budget from Search to **Social + Display** (impression share jumped from ~20% to ~50%). Those prospecting/awareness segments reach colder audiences, so their true CTR collapsed — but the **stale production model** kept predicting the old ~2.4% rate, so the bidding system over-bid and burned **~$242K**.\n",
                 "\n",
-                "**On this page:** the top line shows the stale model's prediction (orange) staying flat while actual CTR (navy) falls \u2014 that widening gap is the wasted spend. The area chart shows the Social/Display mix swelling; the bars show where CTR collapsed and where the waste concentrated."
+                "**On this page:** the top line shows the stale model's prediction (orange) staying flat while actual CTR (navy) falls — that widening gap is the wasted spend. The area chart shows the Social/Display mix swelling; the bars show where CTR collapsed and where the waste concentrated."
               ]
             }
           },
@@ -367,7 +395,7 @@
               ],
               "frame": {
                 "showTitle": true,
-                "title": "Predicted (stale) vs actual CTR \u2014 the divergence"
+                "title": "Predicted (stale) vs actual CTR — the divergence"
               }
             }
           },
@@ -453,7 +481,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "Weekly impressions by channel \u2014 the mix shift"
+                "title": "Weekly impressions by channel — the mix shift"
               }
             }
           },
@@ -542,7 +570,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "CTR by channel \u2014 Social & Display lowest"
+                "title": "CTR by channel — Social & Display lowest"
               }
             }
           },
@@ -633,7 +661,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "Wasted spend by channel \u2014 Social & Display dominate"
+                "title": "Wasted spend by channel — Social & Display dominate"
               }
             }
           },
@@ -657,9 +685,9 @@
             "name": "title2",
             "multilineTextboxSpec": {
               "lines": [
-                "# Model & Recovery \u2014 the retrained champion\n",
+                "# Model & Recovery — the retrained champion\n",
                 "\n",
-                "Maya reran the **standardized batch training workflow**: engineer feature sets \u2192 train XGBoost CTR-regression candidates \u2192 tune with Optuna \u2192 log every run to **MLflow** \u2192 register the winner in **Unity Catalog** and promote the **`@champion`** alias. The champion learned the new Social/Display reality, so its predictions track actual CTR again.\n",
+                "Maya reran the **standardized batch training workflow**: engineer feature sets → train XGBoost CTR-regression candidates → tune with Optuna → log every run to **MLflow** → register the winner in **Unity Catalog** and promote the **`@champion`** alias. The champion learned the new Social/Display reality, so its predictions track actual CTR again.\n",
                 "\n",
                 "**On this page:** the top line shows the champion (cyan) snapping onto actual CTR (navy) even through the drift window, where the stale model (orange) stayed wrong. The gap bars quantify the fix per channel, and the table lists the exact mis-bid segments the retrain corrected. The MLflow experiment leaderboard + feature importance are shown live in the notebook."
               ]
@@ -932,7 +960,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "CTR-accuracy lift by channel \u2014 biggest on Social & Display"
+                "title": "CTR-accuracy lift by channel — biggest on Social & Display"
               }
             }
           },
@@ -1084,6 +1112,727 @@
             "y": 14,
             "width": 12,
             "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "model_health",
+      "displayName": "Model Health",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "health_title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Model Health — drift, accuracy, and automated retraining\n\nThe same impression-weighted metrics drive this dashboard and the daily retraining decision. **Warning:** RMSE ≥10% above baseline. **Critical:** RMSE ≥20% above baseline. Retraining requires two consecutive critical 7-day periods, at least 50K impressions, and a 7-day cooldown."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "health_rmse",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_latest",
+                  "fields": [
+                    {
+                      "name": "weighted_rmse",
+                      "expression": "`weighted_rmse`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "weighted_rmse",
+                  "displayName": "7-day RMSE",
+                  "format": {
+                    "type": "number",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 5
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Impression-weighted RMSE"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "health_mae",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_latest",
+                  "fields": [
+                    {
+                      "name": "weighted_mae",
+                      "expression": "`weighted_mae`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "weighted_mae",
+                  "displayName": "7-day MAE",
+                  "format": {
+                    "type": "number",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 5
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Impression-weighted MAE"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "health_bias",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_latest",
+                  "fields": [
+                    {
+                      "name": "signed_bias",
+                      "expression": "`signed_bias`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "signed_bias",
+                  "displayName": "Signed bias",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 3
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prediction bias"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "health_change",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_latest",
+                  "fields": [
+                    {
+                      "name": "rmse_change_pct",
+                      "expression": "`rmse_change_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rmse_change_pct",
+                  "displayName": "RMSE vs baseline",
+                  "format": {
+                    "type": "number",
+                    "suffix": "%",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Drift vs training baseline"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "health_ctr_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_trend",
+                  "fields": [
+                    {
+                      "name": "metric_date",
+                      "expression": "`metric_date`"
+                    },
+                    {
+                      "name": "actual_ctr",
+                      "expression": "`actual_ctr`"
+                    },
+                    {
+                      "name": "predicted_ctr",
+                      "expression": "`predicted_ctr`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "metric_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Date"
+                },
+                "y": {
+                  "fieldName": "actual_ctr",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "CTR",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "actual_ctr",
+                        "color": "#094074"
+                      },
+                      {
+                        "value": "predicted_ctr",
+                        "color": "#5ADBFF"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "7-day actual vs predicted CTR"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "health_error_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_trend",
+                  "fields": [
+                    {
+                      "name": "metric_date",
+                      "expression": "`metric_date`"
+                    },
+                    {
+                      "name": "weighted_rmse",
+                      "expression": "`weighted_rmse`"
+                    },
+                    {
+                      "name": "weighted_mae",
+                      "expression": "`weighted_mae`"
+                    },
+                    {
+                      "name": "baseline_rmse",
+                      "expression": "`baseline_rmse`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "metric_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Date"
+                },
+                "y": {
+                  "fieldName": "weighted_rmse",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Error"
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "weighted_rmse",
+                        "color": "#FE9000"
+                      },
+                      {
+                        "value": "weighted_mae",
+                        "color": "#FFDD4A"
+                      },
+                      {
+                        "value": "baseline_rmse",
+                        "color": "#3C6997"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "7-day RMSE and MAE vs baseline"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "health_dimension_filter",
+            "queries": [
+              {
+                "name": "health_dimension_query",
+                "query": {
+                  "datasetName": "ds_health_slices",
+                  "fields": [
+                    {
+                      "name": "dimension_name",
+                      "expression": "`dimension_name`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "dimension_name",
+                    "displayName": "Breakdown",
+                    "queryName": "health_dimension_query"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Slice dimension"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "health_dimension_help",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Select **channel, device, country, visitor type, campaign, or objective** to compare the latest 7-day accuracy. The scatter highlights slices where RMSE deterioration and absolute CTR error coincide."
+              ]
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 11,
+            "width": 8,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "health_hotspots",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_slices",
+                  "fields": [
+                    {
+                      "name": "rmse_change_pct",
+                      "expression": "`rmse_change_pct`"
+                    },
+                    {
+                      "name": "absolute_ctr_gap",
+                      "expression": "`absolute_ctr_gap`"
+                    },
+                    {
+                      "name": "dimension_name",
+                      "expression": "`dimension_name`"
+                    },
+                    {
+                      "name": "impressions",
+                      "expression": "`impressions`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "rmse_change_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "RMSE change vs baseline (%)"
+                },
+                "y": {
+                  "fieldName": "absolute_ctr_gap",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Absolute CTR gap",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "dimension_name",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Dimension"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Accuracy and drift hotspots"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "health_slice_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_slices",
+                  "fields": [
+                    {
+                      "name": "dimension_name",
+                      "expression": "`dimension_name`"
+                    },
+                    {
+                      "name": "dimension_value",
+                      "expression": "`dimension_value`"
+                    },
+                    {
+                      "name": "drift_status",
+                      "expression": "`drift_status`"
+                    },
+                    {
+                      "name": "rmse_change_pct",
+                      "expression": "`rmse_change_pct`"
+                    },
+                    {
+                      "name": "weighted_rmse",
+                      "expression": "`weighted_rmse`"
+                    },
+                    {
+                      "name": "weighted_mae",
+                      "expression": "`weighted_mae`"
+                    },
+                    {
+                      "name": "signed_bias",
+                      "expression": "`signed_bias`"
+                    },
+                    {
+                      "name": "actual_ctr",
+                      "expression": "`actual_ctr`"
+                    },
+                    {
+                      "name": "predicted_ctr",
+                      "expression": "`predicted_ctr`"
+                    },
+                    {
+                      "name": "impressions",
+                      "expression": "`impressions`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "dimension_name",
+                    "displayName": "Dimension"
+                  },
+                  {
+                    "fieldName": "dimension_value",
+                    "displayName": "Slice"
+                  },
+                  {
+                    "fieldName": "drift_status",
+                    "displayName": "Status"
+                  },
+                  {
+                    "fieldName": "rmse_change_pct",
+                    "displayName": "RMSE Δ %"
+                  },
+                  {
+                    "fieldName": "weighted_rmse",
+                    "displayName": "RMSE"
+                  },
+                  {
+                    "fieldName": "weighted_mae",
+                    "displayName": "MAE"
+                  },
+                  {
+                    "fieldName": "signed_bias",
+                    "displayName": "Bias"
+                  },
+                  {
+                    "fieldName": "actual_ctr",
+                    "displayName": "Actual CTR"
+                  },
+                  {
+                    "fieldName": "predicted_ctr",
+                    "displayName": "Predicted CTR"
+                  },
+                  {
+                    "fieldName": "impressions",
+                    "displayName": "Impressions"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Latest 7-day accuracy by slice"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 13,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "health_decision_history",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_retrain_decisions",
+                  "fields": [
+                    {
+                      "name": "evaluated_at",
+                      "expression": "`evaluated_at`"
+                    },
+                    {
+                      "name": "metric_date",
+                      "expression": "`metric_date`"
+                    },
+                    {
+                      "name": "weighted_rmse",
+                      "expression": "`weighted_rmse`"
+                    },
+                    {
+                      "name": "baseline_rmse",
+                      "expression": "`baseline_rmse`"
+                    },
+                    {
+                      "name": "rmse_change_pct",
+                      "expression": "`rmse_change_pct`"
+                    },
+                    {
+                      "name": "impressions",
+                      "expression": "`impressions`"
+                    },
+                    {
+                      "name": "should_retrain",
+                      "expression": "`should_retrain`"
+                    },
+                    {
+                      "name": "reason",
+                      "expression": "`reason`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "evaluated_at",
+                    "displayName": "Evaluated"
+                  },
+                  {
+                    "fieldName": "metric_date",
+                    "displayName": "Metric date"
+                  },
+                  {
+                    "fieldName": "weighted_rmse",
+                    "displayName": "7-day RMSE"
+                  },
+                  {
+                    "fieldName": "baseline_rmse",
+                    "displayName": "Baseline RMSE"
+                  },
+                  {
+                    "fieldName": "rmse_change_pct",
+                    "displayName": "RMSE Δ %"
+                  },
+                  {
+                    "fieldName": "impressions",
+                    "displayName": "Impressions"
+                  },
+                  {
+                    "fieldName": "should_retrain",
+                    "displayName": "Triggered"
+                  },
+                  {
+                    "fieldName": "reason",
+                    "displayName": "Decision reason"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Automated retraining decision history"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 12,
+            "height": 5
           }
         }
       ]

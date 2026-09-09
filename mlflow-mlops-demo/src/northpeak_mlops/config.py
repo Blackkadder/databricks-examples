@@ -15,8 +15,16 @@ def load_training_config() -> dict[str, Any]:
     with config_path.open(encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
 
-    required = {"categorical_features", "feature_sets", "xgboost_search_space"}
+    required = {"destination", "categorical_features", "feature_sets", "xgboost_search_space"}
     missing = required.difference(config)
     if missing:
         raise ValueError(f"Training configuration is missing: {', '.join(sorted(missing))}")
+
+    required_destination = {"catalog", "schema", "tables", "registered_model", "experiments"}
+    missing_destination = required_destination.difference(config["destination"])
+    if missing_destination:
+        raise ValueError(
+            "Destination configuration is missing: "
+            f"{', '.join(sorted(missing_destination))}"
+        )
     return config

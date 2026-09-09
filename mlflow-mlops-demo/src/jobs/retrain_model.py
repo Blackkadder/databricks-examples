@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Retrain and conditionally deploy the NorthPeak CTR model")
     parser.add_argument("--catalog", required=True)
     parser.add_argument("--schema", required=True)
-    parser.add_argument("--experiment-path", required=True)
+    parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--min-improvement-pct", type=float, default=0.0)
     parser.add_argument("--trials", type=int, default=4)
     return parser.parse_args()
@@ -56,7 +56,7 @@ def main() -> None:
     incumbent_rmse = incumbent_drift_rmse(spark, args.catalog, args.schema)
     training_result = train_model(
         training_frame,
-        TrainingConfig(experiment_path=args.experiment_path, n_trials=args.trials),
+        TrainingConfig(experiment_id=args.experiment_id, n_trials=args.trials),
     )
     version = register_model(training_result.model_uri, model_name)
     decision = deploy_model(

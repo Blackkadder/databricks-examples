@@ -1,0 +1,41 @@
+resources:
+  jobs:
+    northpeak_ctr_monitor:
+      name: "[${bundle.target}] NorthPeak CTR Model Monitor"
+      description: Compute granular model-health metrics and trigger guarded retraining on persistent drift
+      schedule:
+        quartz_cron_expression: "0 0 7 * * ?"
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: evaluate_drift
+          spark_python_task:
+            python_file: ../src/jobs/monitor_model.py
+            parameters:
+              - --catalog
+              - ${resources.schemas.ctr_schema.catalog_name}
+              - --schema
+              - ${resources.schemas.ctr_schema.name}
+          environment_key: monitor
+
+        - task_key: drift_threshold_met
+          depends_on:
+            - task_key: evaluate_drift
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.evaluate_drift.values.should_retrain}}"
+            right: "true"
+
+        - task_key: trigger_retrain
+          depends_on:
+            - task_key: drift_threshold_met
+              outcome: "true"
+          run_job_task:
+            job_id: ${resources.jobs.northpeak_ctr_retrain.id}
+
+      environments:
+        - environment_key: monitor
+          spec:
+            client: "4"
+            dependencies:
+              - PyYAML==6.0.2

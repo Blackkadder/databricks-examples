@@ -21,12 +21,12 @@ resources:
             base_parameters:
               catalog: ${resources.schemas.ctr_schema.catalog_name}
               schema: ${resources.schemas.ctr_schema.name}
-              experiment_path: /Users/${workspace.current_user.userName}/${bundle.target}_northpeak_ctr/experiments/ctr_regressor
+              experiment_id: "2232515377525630"
           environment_key: ml
 
         - task_key: deploy_genie
           depends_on:
-            - task_key: train_score_ml
+            - task_key: initialize_model_monitoring
           notebook_task:
             notebook_path: ../src/notebooks/deploy_genie.py
             base_parameters:
@@ -34,6 +34,12 @@ resources:
               schema: ${resources.schemas.ctr_schema.name}
               warehouse_id: ${var.warehouse_id}
           environment_key: sdk_latest
+
+        - task_key: initialize_model_monitoring
+          depends_on:
+            - task_key: train_score_ml
+          run_job_task:
+            job_id: ${resources.jobs.northpeak_ctr_monitor.id}
 
       environments:
         - environment_key: sdk_default

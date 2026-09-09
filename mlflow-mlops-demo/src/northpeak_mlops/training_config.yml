@@ -1,3 +1,22 @@
+destination:
+  catalog: solution_builder
+  schema: demo_mlflow_logged_ctr_optimization
+  tables:
+    training_features: gold_segment_ctr_daily
+    predictions: gold_ctr_predictions
+    monitoring_metrics: gold_model_monitoring_metrics
+    retrain_decisions: model_retrain_decisions
+  registered_model:
+    name: ctr_regressor
+    alias: champion
+  experiments:
+    initial_training:
+      id: "2232515377525630"
+    automated_retraining:
+      id: "3770970266054053"
+  dashboard_id: 01f1ab98bd911eef89a8f2256d0361d1
+  genie_space_id: 01f1ab974de6124eb6533ad0625849bf
+
 categorical_features:
   - channel
   - device
@@ -52,3 +71,18 @@ xgboost_search_space:
     type: float
     low: 0.7
     high: 1.0
+
+monitoring:
+  windows_days: [1, 7, 28]
+  dimensions:
+    - channel
+    - device
+    - country
+    - visitor_type
+    - campaign_name
+    - objective
+  warning_rmse_increase_pct: 10.0
+  critical_rmse_increase_pct: 20.0
+  consecutive_critical_periods: 2
+  minimum_impressions: 50000
+  retrain_cooldown_days: 7

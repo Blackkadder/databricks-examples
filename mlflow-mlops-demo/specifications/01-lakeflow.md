@@ -71,7 +71,7 @@ Each impression's click probability = a **base CTR by segment features**, so the
 - **`gold_segment_ctr_daily`** ~ (2,400 segments × active days, ~150K rows) — **one row per `(event_date, channel, device, country, visitor_type, campaign_id)`**. Columns: `event_date`, `event_week`, `channel`, `campaign_id`, `campaign_name`, `device`, `country`, `visitor_type`, `objective`, `impressions` (COUNT), `clicks` (SUM clicked), `conversions` (SUM converted), `actual_ctr` (clicks/impressions), `actual_cvr` (conversions/NULLIF(clicks,0)), `spend_usd` (SUM cost_usd), `conversion_value_usd` (SUM), `is_drift_window`, `is_drift_segment`. This is the **training source** (pre-drift rows) AND the actuals the dashboard/predictions join against. COMMENT every column.
 - **`gold_campaign_daily`** ~ (12 campaigns × 90 days × channels, small) — daily rollup per `(event_date, event_week, channel, campaign_id, campaign_name, objective)`: `impressions`, `clicks`, `conversions`, `blended_ctr`, `spend_usd`, `conversion_value_usd`. Powers the trend/KPI widgets and the channel-mix view. COMMENT every column.
 
-> `gold_ctr_predictions` is **created by the ML notebook** (`03-ml-ctr.md`), not the data-gen script — it depends on the trained model. The data-gen script must leave the gold actuals tables in place for the notebook to read.
+> `gold_ctr_predictions` is created by the educational ML notebook or the reusable retraining/scoring helpers (`03-ml-ctr.md`), not the data-gen script — it depends on the trained model. The monitor subsequently derives `gold_model_monitoring_metrics` and `model_retrain_decisions`. The data-gen script must leave the gold actuals tables in place for these jobs to read.
 
 ---
 

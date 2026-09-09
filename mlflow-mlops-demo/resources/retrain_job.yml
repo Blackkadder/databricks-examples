@@ -12,8 +12,8 @@ resources:
               - ${resources.schemas.ctr_schema.catalog_name}
               - --schema
               - ${resources.schemas.ctr_schema.name}
-              - --experiment-path
-              - /Users/${workspace.current_user.userName}/${bundle.target}_northpeak_ctr/experiments/automated_retrain
+              - --experiment-id
+              - "3770970266054053"
               - --min-improvement-pct
               - "0.0"
           environment_key: ml

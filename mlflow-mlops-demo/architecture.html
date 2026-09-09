@@ -13,7 +13,7 @@
 [
   {
     "name": "MLflow CTR Optimization",
-    "story": "Ad-impression logs, ad-platform campaign feeds, and web-analytics events land in a governed lakehouse via Lakeflow. A standardized batch workflow trains XGBoost CTR-regression candidates with MLflow (every run/param/metric/feature-set logged), registers the winner in Unity Catalog with a @champion alias, and batch-scores every segment into a gold predictions table that AI/BI dashboards and a Genie Agent read — reached by the business through Genie One, all governed by Unity Catalog.",
+    "story": "Synthetic ad-impression, campaign, and web-analytics data represents production feeds in a governed lakehouse. A standardized batch workflow trains XGBoost CTR-regression candidates with MLflow, registers every winner in Unity Catalog, promotes only candidates that beat @champion, and batch-scores segments. A daily model monitor computes granular accuracy and drift metrics, then conditionally triggers retraining when persistent drift passes volume and cooldown safeguards. AI/BI dashboards and Genie consume the governed gold tables.",
     "options": {
       "trademarkLogos": true
     },
@@ -41,7 +41,7 @@
         "col": "work",
         "row": 1,
         "desc": "Drift, wasted spend, champion recovery",
-        "ai_reasoning": "the 2-page CTR Optimization dashboard — predicted-vs-actual divergence, $242K wasted-spend KPI, champion vs stale lift"
+        "ai_reasoning": "the 3-page CTR Optimization dashboard — predicted-vs-actual divergence, $242K wasted-spend KPI, champion recovery, and granular model health"
       },
       {
         "id": "db-platform",
@@ -90,7 +90,7 @@
           "silver_desc": "Cleaned impression fact + drift flags",
           "gold_desc": "Segment-day CTR actuals + predictions"
         },
-        "ai_reasoning": "the one data-layer block: Lakeflow ingest + bronze→silver→gold SDP, built/maintained by Genie Code (Genie Code beat is built into this block's footer — no separate tile)"
+        "ai_reasoning": "the demo generates the raw→silver→gold layers inline; Lakeflow Connect and SDP remain the production talking track"
       },
       {
         "id": "model-training",
@@ -99,6 +99,15 @@
         "row": 1,
         "desc": "MLflow: 3 feature sets × XGBoost + Optuna, every run logged",
         "ai_reasoning": "the standardized batch retrain — MLflow tracking of every candidate run/param/metric/feature-importance/artifact; trains on gold segment features from the block"
+      },
+      {
+        "id": "model-monitoring",
+        "type": "lakeflow-jobs",
+        "col": "compute",
+        "row": 2,
+        "label": "Model Monitoring",
+        "desc": "Daily accuracy slices + guarded drift trigger",
+        "ai_reasoning": "computes 1/7/28-day RMSE, MAE, bias and CTR gaps by business dimension; triggers retraining only after persistent critical drift, minimum volume and cooldown checks"
       },
       {
         "id": "note-batch",
@@ -129,6 +138,7 @@
           "model-training",
           "uc-registry",
           "batch-score",
+          "model-monitoring",
           "sql-lakehouse",
           "dashboard",
           "genie",
@@ -178,7 +188,7 @@
         "col": "ml",
         "row": 2,
         "desc": "Versioned models + @champion alias",
-        "ai_reasoning": "proper versioning + governance — the winning run is registered as a new UC version and promoted @champion (stale baseline stays as an older version for the before/after)"
+        "ai_reasoning": "proper versioning + governance — every candidate winner is registered, but only a candidate that improves on the incumbent moves @champion"
       }
     ],
     "edges": [
@@ -255,6 +265,20 @@
         "from": "sql-lakehouse@r",
         "to": "dashboard@l",
         "flow": true
+      },
+      {
+        "id": "e13",
+        "from": "sql-lakehouse@b",
+        "to": "model-monitoring@t",
+        "flow": true,
+        "label": "Predictions + actuals"
+      },
+      {
+        "id": "e14",
+        "from": "model-monitoring@l",
+        "to": "model-training@r",
+        "flow": true,
+        "label": "Conditional retrain"
       }
     ]
   }

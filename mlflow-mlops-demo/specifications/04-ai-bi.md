@@ -1,6 +1,6 @@
 # AI/BI — Dashboard + Genie
 
-Tables/columns referenced here are defined in `01-lakeflow.md` (`gold_segment_ctr_daily`, `gold_campaign_daily`) and `03-ml-ctr.md` (`gold_ctr_predictions`). All FQNs under `solution_builder.demo_mlflow_logged_ctr_optimization`.
+Tables/columns referenced here are defined in `01-lakeflow.md` (`gold_segment_ctr_daily`, `gold_campaign_daily`) and `03-ml-ctr.md` (`gold_ctr_predictions`, `gold_model_monitoring_metrics`, `model_retrain_decisions`). All FQNs are under the bundle-selected catalog and schema.
 
 > **Talking-track-only products in the README** — do NOT build resources for these: **Genie One** (business-user surface — appears once the Genie space exists), **Genie Code** (authoring assist inside the notebook/SQL editor), **Unity Catalog** (workspace governance, grants applied in build), **Lakeflow Connect** (ingest narrative).
 
@@ -62,10 +62,10 @@ Add `genie_space_id` to `resources.json`.
 
 **Skill**: `databricks-aibi-dashboards` — read `SKILLS/databricks-aibi-dashboards/SKILL.md` first. It owns JSON shape, encoding, grid math; this spec is WHAT.
 
-Create **`NorthPeak CTR Optimization`** dashboard. Save locally as `PROJECT/dashboard.json`. Link the Genie space. Set `--dataset-catalog solution_builder --dataset-schema demo_mlflow_logged_ctr_optimization` on `lakeview create` AND `update`.
+Create **`NorthPeak CTR Optimization`** dashboard. Save locally as `PROJECT/src/dashboard/dashboard.json`. Bind the bundle dashboard resource to the selected dataset catalog/schema and SQL warehouse.
 
 ### Design principles
-- **Two pages**: Page 1 **Spend & Drift** (the glance — "accuracy drifted, $240K wasted, here's where"); Page 2 **Model & Recovery** (the MLflow payoff — predicted-vs-actual for both models, CTR lift by segment, recovery).
+- **Three pages**: Page 1 **Spend & Drift** (the glance — "accuracy drifted, $240K wasted, here's where"); Page 2 **Model & Recovery** (the MLflow payoff); Page 3 **Model Health** (ongoing accuracy, granular drift, and retraining decisions).
 - **5-second test**: predicted-vs-actual CTR divergence on Page 1 is unmissable; the champion line snapping back onto actuals on Page 2 is the wow.
 - Row 1 of each page = a markdown `text` widget naming the event + touring the page.
 
@@ -88,6 +88,10 @@ widgetHeaderAlignment: LEFT
 | `ds_channel_mix` | weekly impression share + CTR by channel from `gold_campaign_daily` | channel-mix area/bar + weekly CTR-by-channel line |
 | `ds_pred_actual` | weekly avg `actual_ctr`, `predicted_ctr_stale`, `predicted_ctr_champion` from `gold_ctr_predictions` (optionally joined to gold for weeks) | predicted-vs-actual trend lines (both pages) |
 | `ds_segment_gap` | segment-level `ctr_gap_stale`, `ctr_gap_champion`, `spend_usd`, wasted-spend from `gold_ctr_predictions`, drift window | gap-by-channel bars, CTR-lift bars, top-wasted-segments table |
+| `ds_health_latest` | latest overall 7-day row from `gold_model_monitoring_metrics` | RMSE, MAE, bias, and baseline-change counters |
+| `ds_health_trend` | overall 7-day monitoring history | actual-vs-predicted and RMSE/MAE/baseline trends |
+| `ds_health_slices` | latest 7-day metrics for every configured non-overall dimension | dimension filter, hotspot scatter, granular accuracy table |
+| `ds_retrain_decisions` | `model_retrain_decisions` audit history | automated-trigger decision table |
 
 Global filters (left panel): **Date Range** (`event_date`/`event_week`), **Channel**, **Device**, **Country** — bound to the datasets above.
 
@@ -120,5 +124,16 @@ Global filters (left panel): **Date Range** (`event_date`/`event_week`), **Chann
 **`title2`** ~4 lines: the retrained champion (registered in UC, `@champion` alias) now tracks actuals · gap-by-channel shows stale vs champion · lift bars quantify the fix · table lists the exact mis-bid segments the retrain corrected. Talking track: MLflow experiment leaderboard + feature importance shown live in the notebook/experiment UI.
 **`both_models_trend`** frame description: *"Champion (cyan) tracks actual CTR (navy) even through the drift window, where the stale model (orange) stayed wrong. That's the retrain closing the $240K gap."*
 
+### Page 3 — Model Health (operational monitoring)
+
+- Four latest-overall counters: impression-weighted RMSE, impression-weighted MAE, signed bias, and RMSE change versus the training baseline.
+- Two 7-day trends: actual vs predicted CTR; RMSE and MAE vs baseline.
+- Single-select slice dimension filter across channel, device, country, visitor type, campaign, and objective.
+- Hotspot scatter: RMSE change vs absolute CTR gap, colored by dimension.
+- Granular table: status, RMSE/MAE, bias, actual/predicted CTR, and impression volume for every slice.
+- Decision-history table: evaluated time, metric date, RMSE/baseline, volume, trigger result, and reason.
+
+The dashboard and the condition task must read the same `gold_model_monitoring_metrics` table so visual status and automated behavior cannot disagree. Avoid MAPE because CTR values close to zero make it unstable.
+
 ### Validation
-Published dashboard reads at a glance: predicted-vs-actual divergence obvious on Page 1, wasted-spend KPI ≈ $240K, champion line snapping onto actuals on Page 2, CTR-lift bars biggest on Social/Display, filters update every widget. Add `dashboard_id` to `resources.json`.
+Published dashboard reads at a glance: predicted-vs-actual divergence obvious on Page 1, wasted-spend KPI ≈ $240K, champion line snapping onto actuals on Page 2, and Model Health shows populated overall trends, slice metrics, and trigger history on Page 3. Every dataset query must be executed successfully against the configured warehouse before dashboard deployment.
