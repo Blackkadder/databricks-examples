@@ -194,6 +194,15 @@ cython_debug/
 # macOS metadata
 .DS_Store
 
+# Databricks CLI local state
+.databricks/
+
+# Go build and test artifacts
+*.exe
+*.test
+*.out
+coverage.out
+
 # PyPI configuration file
 .pypirc
 
